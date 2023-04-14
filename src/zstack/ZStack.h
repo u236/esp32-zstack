@@ -1,10 +1,10 @@
 #ifndef ZSTACK_H
 #define ZSTACK_H
 
-#define ZSTACK_CONFIGURATION_MARKER                 0x42   // Some value to mark that the configuration was written by this controller
-#define ZSTACK_ENDPOINT_ID                          0x01   // Default coordinator endpoint id
+#define ZSTACK_CONFIGURATION_MARKER                 0x42   // some value to mark that the configuration was written by this controller
+#define ZSTACK_ENDPOINT_ID                          0x01   // default coordinator endpoint id
 #define ZSTACK_ENDPOINT_PROFILE_ID                  0x0104 // ZigBee Home Automation Profile
-#define ZSTACK_ENDPOINT_DEVICE_ID                   0x0005 // Default for ZigBee Home Automation devices
+#define ZSTACK_ENDPOINT_DEVICE_ID                   0x0005 // default for ZigBee Home Automation devices
 
 #define ZSTACK_PORT                                 Serial2
 #define ZSTACK_FRAME_FLAG                           0xFE
@@ -20,6 +20,7 @@
 #define ZDO_STARTUP_FROM_APP                        0x2540
 
 #define SYS_RESET_IND                               0x4180
+#define AF_INCOMING_MSG                             0x4481
 #define ZDO_MGMT_PERMIT_JOIN_RSP                    0x45B6
 #define ZDO_STATE_CHANGE_IND                        0x45C0
 #define ZDO_END_DEVICE_ANNCE_IND                    0x45C1
@@ -51,7 +52,8 @@ enum ZStackEvent
     permitJoinChanged,
     permitJoinFailed,
     deviceJoinedNetwork,
-    deviceLeftNetwork
+    deviceLeftNetwork,
+    messageReceived
 };
 
 typedef void (*ZStackCallback) (ZStackEvent event, void *data, size_t length);
@@ -100,7 +102,6 @@ struct afRegisterRequestStruct
     uint8_t  latency;
 };
 
-
 struct permitJoinRequestStruct
 {
     uint8_t  mode;
@@ -123,6 +124,21 @@ struct deviceLeaveStruct
     uint8_t  request;
     uint8_t  remove;
     uint8_t  rejoin;
+};
+
+struct incomingMessageStruct
+{
+    uint16_t groupId;
+    uint16_t clusterId;
+    uint16_t srcAddress;
+    uint8_t  srcEndpointId;
+    uint8_t  dstEndpointId;
+    uint8_t  broadcast;
+    uint8_t  linkQuality;
+    uint8_t  security;
+    uint32_t timestamp;
+    uint8_t  transactionId;
+    uint8_t  length;
 };
 
 #pragma pack(pop)

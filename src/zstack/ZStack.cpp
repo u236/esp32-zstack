@@ -223,6 +223,12 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             break;
         }
 
+        case AF_INCOMING_MSG:
+        {
+            m_callback(ZStackEvent::messageReceived, data, length);
+            break;
+        }
+
         case ZDO_STATE_CHANGE_IND:
         {
             m_status = data[0];
