@@ -34,21 +34,28 @@ void zstackCallback(ZStackEvent event, void *data, size_t length)
             zstack->reset(); // or do something else?
             break;
 
+        case ZStackEvent::statusChanged:
+            Serial.printf("ZStack state changed, new state is 0x%02X\n", *(reinterpret_cast <uint8_t*> (data)));
+            break;
+
+        case ZStackEvent::coordinatorStarting:
+            Serial.printf("ZStack coordinator starting...\n");
+            break;
 
         case ZStackEvent::coordinatorReady:
             Serial.printf("ZStack coordinator ready!\n");
             break;
 
+        case ZStackEvent::coordinatorFailed:
+            Serial.printf("ZStack coordinator startup failed :(\n");
+            break;
     }
 }
 
 void setup(void)
 {
-    Serial.begin(9600);
     pinMode(2, OUTPUT);
-
-    delay(2000);
-    Serial.printf("Hello there!\n");
+    Serial.begin(9600);
 
     zstack = new ZStack(zstackCallback, ZSTACK_CHANNEL, ZSTACK_PANID, ZSTACK_BSL_PIN, ZSTACK_RST_PIN, ZSTACK_RX_PIN, ZSTACK_TX_PIN);
     zstack->reset();

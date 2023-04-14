@@ -1,8 +1,12 @@
 #ifndef ZSTACK_H
 #define ZSTACK_H
 
+#define ZSTACK_CONFIGURATION_MARKER                 0x42   // Some value to mark that the configuration was written by this controller
+#define ZSTACK_ENDPOINT_ID                          0x01   // Default coordinator endpoint id
+#define ZSTACK_ENDPOINT_PROFILE_ID                  0x0104 // ZigBee Home Automation Profile
+#define ZSTACK_ENDPOINT_DEVICE_ID                   0x0005 // Default for ZigBee Home Automation devices
+
 #define ZSTACK_PORT                                 Serial2
-#define ZSTACK_CONFIGURATION_MARKER                 0x42
 #define ZSTACK_FRAME_FLAG                           0xFE
 #define ZSTACK_BUFFER_SIZE                          256
 #define ZSTACK_MINIMAL_LENGTH                       5
@@ -11,8 +15,12 @@
 #define SYS_OSAL_NV_ITEM_INIT                       0x2107
 #define SYS_OSAL_NV_READ                            0x2108
 #define SYS_OSAL_NV_WRITE                           0x2109
+#define AF_REGISTER                                 0x2400
+#define ZDO_STARTUP_FROM_APP                        0x2540
 
 #define SYS_RESET_IND                               0x4180
+#define ZDO_STATE_CHANGE_IND                        0x45C0
+#define APP_CNF_BDB_COMMISSIONING_NOTIFICATION      0x4F80
 
 #define ZCD_NV_STARTUP_OPTION                       0x0003
 #define ZCD_NV_MARKER                               0x0060
@@ -32,7 +40,10 @@ enum ZStackEvent
     configurationMismatch,
     configurationUpdated,
     configurationFailed,
-    coordinatorReady
+    statusChanged,
+    coordinatorStarting,
+    coordinatorReady,
+    coordinatorFailed
 };
 
 typedef void (*ZStackCallback) (ZStackEvent event, void *data, size_t length);
@@ -72,6 +83,15 @@ struct nvDataStruct
     uint8_t  value[16];
 };
 
+struct afRegisterRequestStruct
+{
+    uint8_t  endpointId;
+    uint16_t profileId;
+    uint16_t deviceId;
+    uint8_t  version;
+    uint8_t  latency;
+};
+
 #pragma pack(pop)
 
 class ZStack
@@ -91,6 +111,7 @@ class ZStack
         int8_t m_bslPin, m_rstPin;
 
         bool m_clear;
+        uint8_t m_status;
 
         nvDataStruct m_nvData[8];
         uint8_t m_nvIndex;

@@ -1,18 +1,17 @@
 #include "ZStack.h"
 
-#define PRINT_FRAMES 0
-
-ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t bslPin, int8_t rstPin, int8_t rxPin, int8_t txPin, int8_t core) : m_callback(callback), m_channel(channel), m_bslPin(bslPin), m_rstPin(rstPin), m_clear(false)
+ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t bslPin, int8_t rstPin, int8_t rxPin, int8_t txPin, int8_t core) : m_callback(callback), m_channel(channel), m_bslPin(bslPin), m_rstPin(rstPin), m_clear(false), m_status(0x00)
 {
-    memset(&m_nvData, 0, sizeof(m_nvData));
+    uint32_t channelList = static_cast <uint32_t> (1 << m_channel);
 
     m_nvData[0] = {ZCD_NV_MARKER,            0x01, {ZSTACK_CONFIGURATION_MARKER}};
     m_nvData[1] = {ZCD_NV_PRECFGKEY,         0x10, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}};
     m_nvData[2] = {ZCD_NV_PRECFGKEYS_ENABLE, 0x01, {0x01}};
     m_nvData[3] = {ZCD_NV_PANID,             0x02, {static_cast <uint8_t> (panId), static_cast <uint8_t> (panId >> 8)}};
-    m_nvData[4] = {ZCD_NV_CHANLIST,          0x04, {0x00, 0xF8, 0xFF, 0x07}};
+    m_nvData[4] = {ZCD_NV_CHANLIST,          0x04, {static_cast <uint8_t> (channelList), static_cast <uint8_t> (channelList >> 8), static_cast <uint8_t> (channelList >> 16), static_cast <uint8_t> (channelList >> 24)}};
     m_nvData[5] = {ZCD_NV_LOGICAL_TYPE,      0x01, {0x00}};
     m_nvData[6] = {ZCD_NV_ZDO_DIRECT_CB,     0x01, {0x01}};
+    m_nvData[7] = {0x0000};
 
     pinMode(m_bslPin, OUTPUT);
     pinMode(m_rstPin, OUTPUT);
@@ -55,15 +54,6 @@ void ZStack::parseInput(uint8_t *buffer, size_t length)
 {
     size_t offset = 0;
 
-    if (PRINT_FRAMES) { //////////////////////
-        Serial.printf("received serial data:");
-
-        for (size_t i = 0; i < length; i++)
-            Serial.printf(" %02x", buffer[i]);
-
-        Serial.printf(" (%d)\n", length);
-    } ////////////////////////////////////////
-
     while (length >= offset + ZSTACK_MINIMAL_LENGTH)
     {
         uint8_t *data = buffer + offset, size = data[1], fcs = 0;
@@ -91,15 +81,6 @@ void ZStack::parseInput(uint8_t *buffer, size_t length)
 
 void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
 {
-    if (PRINT_FRAMES) { //////////////////////
-        Serial.printf("received frame 0x%04X with data:", command);
-
-        for (size_t i = 0; i < length; i++)
-            Serial.printf(" %02x", data[i]);
-
-        Serial.printf("\n");
-    } ////////////////////////////////////////
-
     switch (command & 0x2000 ? command ^= 0x4000 : command)
     {
         case SYS_OSAL_NV_ITEM_INIT:
@@ -121,15 +102,6 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             nvReadReplyStruct *reply = reinterpret_cast <nvReadReplyStruct*> (data);
             nvDataStruct *item = &m_nvData[m_nvIndex];
 
-            { ////////////////////////////////////////
-                Serial.printf("nv item 0x%04X:", m_nvData[m_nvIndex].id);
-
-                for (size_t i = 0; i < length; i++)
-                    Serial.printf(" %02x", data[i]);
-
-                Serial.printf("\n");
-            } ////////////////////////////////////////
-
             if (reply->status || reply->length != item->length || memcmp(data + sizeof(nvReadReplyStruct), item->value, item->length))
             {
                 m_callback(ZStackEvent::configurationMismatch, &item->id, sizeof(item->id));
@@ -140,7 +112,21 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
 
             if (!m_nvData[m_nvIndex].id)
             {
-                Serial.println("Ready to start coordinator here");
+                afRegisterRequestStruct request;
+                uint8_t buffer[sizeof(request) + 2];
+
+                m_callback(ZStackEvent::coordinatorStarting, &item->id, sizeof(item->id));
+
+                request.endpointId = ZSTACK_ENDPOINT_ID;
+                request.profileId = ZSTACK_ENDPOINT_PROFILE_ID;
+                request.deviceId = ZSTACK_ENDPOINT_DEVICE_ID;
+                request.version = 0x00;
+                request.latency = 0x00;
+
+                memset(buffer, 0, sizeof(buffer));
+                memcpy(buffer, &request, sizeof(request));
+
+                sendFrame(AF_REGISTER, buffer, sizeof(buffer));
                 break;
             }
 
@@ -173,6 +159,28 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             break;
         }
 
+        case AF_REGISTER:
+        {
+            uint16_t delay = 0;
+
+            if (data[0])
+            {
+                m_callback(ZStackEvent::coordinatorFailed, NULL, 0);
+                break;
+            }
+
+            sendFrame(ZDO_STARTUP_FROM_APP, reinterpret_cast <uint8_t*> (&delay), sizeof(delay));
+            break;
+        }
+
+        case ZDO_STARTUP_FROM_APP:
+        {
+            if (data[0] == 0x02)
+                m_callback(ZStackEvent::coordinatorFailed, NULL, 0);
+
+            break;
+        }
+
         case SYS_RESET_IND:
         {
             m_callback(ZStackEvent::resetDetected, NULL, 0);
@@ -199,6 +207,21 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             readNvItem();
             break;
         }
+
+        case ZDO_STATE_CHANGE_IND:
+        {
+            m_status = data[0];
+            m_callback(ZStackEvent::statusChanged, &m_status, sizeof(m_status));
+            break;
+        }
+
+        case APP_CNF_BDB_COMMISSIONING_NOTIFICATION:
+        {
+            if (data[1] == 0x02 && m_status == 0x09)
+                m_callback(data[2] ? ZStackEvent::coordinatorFailed : ZStackEvent::coordinatorReady, NULL, 0);
+
+            break;
+        }
     }
 }
 
@@ -212,16 +235,6 @@ void ZStack::sendFrame(uint16_t command, uint8_t *data, size_t length)
         fcs ^= buffer[i];
 
     buffer[length + 4] = fcs;
-
-    if (PRINT_FRAMES) { //////////////////////
-        Serial.printf("send frame:");
-
-        for (size_t i = 0; i < length + 5; i++)
-            Serial.printf(" %02x", buffer[i]);
-
-        Serial.printf("\n");
-    } ////////////////////////////////////////
-
     ZSTACK_PORT.write(buffer, length + 5);
 }
 
