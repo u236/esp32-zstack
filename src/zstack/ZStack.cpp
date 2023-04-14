@@ -238,7 +238,7 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
 
         case ZDO_END_DEVICE_ANNCE_IND:
         {
-            m_callback(ZStackEvent::deviceJoinedNetwork, data, length);
+            m_callback(ZStackEvent::deviceJoinedNetwork, data + 2, length);
             break;
         }
 
