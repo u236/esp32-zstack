@@ -16,10 +16,14 @@
 #define SYS_OSAL_NV_READ                            0x2108
 #define SYS_OSAL_NV_WRITE                           0x2109
 #define AF_REGISTER                                 0x2400
+#define ZDO_MGMT_PERMIT_JOIN_REQ                    0x2536
 #define ZDO_STARTUP_FROM_APP                        0x2540
 
 #define SYS_RESET_IND                               0x4180
+#define ZDO_MGMT_PERMIT_JOIN_RSP                    0x45B6
 #define ZDO_STATE_CHANGE_IND                        0x45C0
+#define ZDO_END_DEVICE_ANNCE_IND                    0x45C1
+#define ZDO_LEAVE_IND                               0x45C9
 #define APP_CNF_BDB_COMMISSIONING_NOTIFICATION      0x4F80
 
 #define ZCD_NV_STARTUP_OPTION                       0x0003
@@ -43,7 +47,11 @@ enum ZStackEvent
     statusChanged,
     coordinatorStarting,
     coordinatorReady,
-    coordinatorFailed
+    coordinatorFailed,
+    permitJoinChanged,
+    permitJoinFailed,
+    deviceJoinedNetwork,
+    deviceLeftNetwork
 };
 
 typedef void (*ZStackCallback) (ZStackEvent event, void *data, size_t length);
@@ -92,6 +100,31 @@ struct afRegisterRequestStruct
     uint8_t  latency;
 };
 
+
+struct permitJoinRequestStruct
+{
+    uint8_t  mode;
+    uint16_t dstAddress;
+    uint8_t  duration;
+    uint8_t  significance;
+};
+
+struct deviceAnnounceStruct
+{
+    uint16_t shortAddress;
+    uint64_t ieeeAddress;
+    uint8_t  capabilities;
+};
+
+struct deviceLeaveStruct
+{
+    uint16_t shortAddress;
+    uint64_t ieeeAddress;
+    uint8_t  request;
+    uint8_t  remove;
+    uint8_t  rejoin;
+};
+
 #pragma pack(pop)
 
 class ZStack
@@ -102,6 +135,7 @@ class ZStack
 
         void reset(void);
         void clear(void);
+        void permitJoin(bool permit);
         void parseInput(uint8_t *buffer, size_t length);
 
     private:
@@ -110,7 +144,7 @@ class ZStack
         uint8_t m_channel;
         int8_t m_bslPin, m_rstPin;
 
-        bool m_clear;
+        bool m_clear, m_permitJoin;
         uint8_t m_status;
 
         nvDataStruct m_nvData[8];

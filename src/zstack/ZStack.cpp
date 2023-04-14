@@ -1,6 +1,6 @@
 #include "ZStack.h"
 
-ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t bslPin, int8_t rstPin, int8_t rxPin, int8_t txPin, int8_t core) : m_callback(callback), m_channel(channel), m_bslPin(bslPin), m_rstPin(rstPin), m_clear(false), m_status(0x00)
+ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t bslPin, int8_t rstPin, int8_t rxPin, int8_t txPin, int8_t core) : m_callback(callback), m_channel(channel), m_bslPin(bslPin), m_rstPin(rstPin), m_clear(false), m_permitJoin(false), m_status(0x00)
 {
     uint32_t channelList = static_cast <uint32_t> (1 << m_channel);
 
@@ -26,8 +26,6 @@ ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t 
 
 void ZStack::reset(void)
 {
-    // TODO: add reset task with timeout
-
     digitalWrite(m_rstPin, LOW);
     delay(10);
     digitalWrite(m_rstPin, HIGH);
@@ -38,8 +36,6 @@ void ZStack::clear(void)
     nvWriteRequestStruct request;
     uint8_t buffer[sizeof(request) + 1];
 
-    m_clear = true;
-
     request.id = ZCD_NV_STARTUP_OPTION;
     request.offset = 0x00;
     request.length = 0x01;
@@ -47,7 +43,21 @@ void ZStack::clear(void)
     memcpy(buffer, &request, sizeof(request));
     buffer[sizeof(request)] = 0x03;
 
+    m_clear = true;
     sendFrame(SYS_OSAL_NV_WRITE, buffer, sizeof(buffer));
+}
+
+void ZStack::permitJoin(bool enabled)
+{
+    permitJoinRequestStruct request;
+
+    request.mode = 0x0F;
+    request.dstAddress = 0xFFFC;
+    request.duration = enabled ? 0xFF : 0x00;
+    request.significance = 0x00;
+
+    m_permitJoin = enabled;
+    sendFrame(ZDO_MGMT_PERMIT_JOIN_REQ, reinterpret_cast <uint8_t*> (&request), sizeof(request));
 }
 
 void ZStack::parseInput(uint8_t *buffer, size_t length)
@@ -173,6 +183,12 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             break;
         }
 
+        case ZDO_MGMT_PERMIT_JOIN_REQ:
+        {
+            m_callback(data[0] ? ZStackEvent::permitJoinFailed : ZStackEvent::permitJoinChanged, &m_permitJoin, sizeof(m_permitJoin));
+            break;
+        }
+
         case ZDO_STARTUP_FROM_APP:
         {
             if (data[0] == 0x02)
@@ -191,8 +207,6 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
                 nvInitRequestStruct request;
                 uint8_t buffer[sizeof(request) + 1];
 
-                m_clear = false;
-
                 request.id = ZCD_NV_MARKER;
                 request.itemLength = 0x01;
                 request.dataLength = 0x01;
@@ -200,6 +214,7 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
                 memcpy(buffer, &request, sizeof(request));
                 buffer[sizeof(request)] = ZSTACK_CONFIGURATION_MARKER;
 
+                m_clear = false;
                 sendFrame(SYS_OSAL_NV_ITEM_INIT, buffer, sizeof(buffer));
                 break;
             }
@@ -212,6 +227,18 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
         {
             m_status = data[0];
             m_callback(ZStackEvent::statusChanged, &m_status, sizeof(m_status));
+            break;
+        }
+
+        case ZDO_END_DEVICE_ANNCE_IND:
+        {
+            m_callback(ZStackEvent::deviceJoinedNetwork, data, length);
+            break;
+        }
+
+        case ZDO_LEAVE_IND:
+        {
+            m_callback(ZStackEvent::deviceLeftNetwork, data, length);
             break;
         }
 

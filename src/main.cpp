@@ -21,7 +21,7 @@ void zstackCallback(ZStackEvent event, void *data, size_t length)
             break;
 
         case ZStackEvent::configurationMismatch:
-            Serial.printf("ZStack NV item 0x%04X value mismatch, updating configuration...\n", *(reinterpret_cast <uint16_t*> (data)));
+            Serial.printf("ZStack NV item 0x%04x value mismatch, updating configuration...\n", *(reinterpret_cast <uint16_t*> (data)));
             zstack->clear(); // or do something else?
             break;
 
@@ -30,12 +30,12 @@ void zstackCallback(ZStackEvent event, void *data, size_t length)
             break;
 
         case ZStackEvent::configurationFailed:
-            Serial.printf("ZStack NV item 0x%04X configuration failed :(\n", *(reinterpret_cast <uint16_t*> (data)));
+            Serial.printf("ZStack NV item 0x%04x configuration failed :(\n", *(reinterpret_cast <uint16_t*> (data)));
             zstack->reset(); // or do something else?
             break;
 
         case ZStackEvent::statusChanged:
-            Serial.printf("ZStack state changed, new state is 0x%02X\n", *(reinterpret_cast <uint8_t*> (data)));
+            Serial.printf("ZStack state changed, new state is 0x%02x\n", *(reinterpret_cast <uint8_t*> (data)));
             break;
 
         case ZStackEvent::coordinatorStarting:
@@ -44,11 +44,34 @@ void zstackCallback(ZStackEvent event, void *data, size_t length)
 
         case ZStackEvent::coordinatorReady:
             Serial.printf("ZStack coordinator ready!\n");
+            zstack->permitJoin(true); // move it somewhere
             break;
 
         case ZStackEvent::coordinatorFailed:
             Serial.printf("ZStack coordinator startup failed :(\n");
             break;
+
+        case ZStackEvent::permitJoinChanged:
+            Serial.printf("ZStack permit join is now %s...\n", *(reinterpret_cast <bool*> (data)) ? "enabled" : "disabled");
+            break;
+
+        case ZStackEvent::permitJoinFailed:
+            Serial.printf("ZStack permit join request failed :(\n");
+            break;
+
+        case ZStackEvent::deviceJoinedNetwork:
+        {
+            deviceAnnounceStruct *announce = reinterpret_cast <deviceAnnounceStruct*> (data);
+            Serial.printf("ZStack device 0x%16llx joined network with short address 0x%04x!\n", announce->ieeeAddress, announce->shortAddress);
+            break;
+        }
+
+        case ZStackEvent::deviceLeftNetwork:
+        {
+            deviceLeaveStruct *leave = reinterpret_cast <deviceLeaveStruct*> (data);
+            Serial.printf("ZStack device 0x%16llx left network...\n", leave->ieeeAddress);
+            break;
+        }
     }
 }
 
