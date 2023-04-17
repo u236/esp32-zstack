@@ -1,22 +1,23 @@
 #include <zstack/ZStack.h>
 
-#define PRINT_ZCL_DUMP              true
-#define BLINK_PIN                   2
+#define PRINT_ZCL_DUMP                      true
+#define BLINK_PIN                           2
 
-#define ZSTACK_CHANNEL              11
-#define ZSTACK_PANID                0x1234 // WARNING: use unique panId for each zigbee network in the same area!
+#define ZSTACK_CHANNEL                      11
+#define ZSTACK_PANID                        0x1234 // WARNING: use unique panId for each zigbee network in the same area!
 
-#define ZSTACK_BSL_PIN              14
-#define ZSTACK_RST_PIN              4
-#define ZSTACK_RX_PIN               18
-#define ZSTACK_TX_PIN               19
+#define ZSTACK_BSL_PIN                      14
+#define ZSTACK_RST_PIN                      4
+#define ZSTACK_RX_PIN                       18
+#define ZSTACK_TX_PIN                       19
 
 // few ZCL definitions here
-#define FC_MANUFACTURER_SPECIFIC    0x04
-#define FC_CLUSTER_SPECIFIC         0x01
-#define CMD_REPORT_ATTRIBUTES       0x0A
-#define CMD_CONFIGURE_REPORTING     0x06
-#define CMD_DEFAULT_RESPONSE        0x0B
+#define FC_MANUFACTURER_SPECIFIC            0x04
+#define FC_CLUSTER_SPECIFIC                 0x01
+#define CMD_REPORT_ATTRIBUTES               0x0A
+#define CMD_CONFIGURE_REPORTING             0x06
+#define CMD_CONFIGURE_REPORTING_RESPONSE    0x07
+#define CMD_DEFAULT_RESPONSE                0x0B
 
 #pragma pack(push, 1)
 
@@ -110,15 +111,21 @@ static void zclMessage(uint8_t endpointId, uint16_t clusterId, uint8_t *data, si
                     break;
             }
 
-            return;
+            break;
         }
+
+        case CMD_CONFIGURE_REPORTING_RESPONSE:
+            Serial.printf("Configure reporting response received, status: 0x%02x\n", payload[0]);
+            break;
 
         case CMD_DEFAULT_RESPONSE:
             Serial.printf("Default response received, commandId: 0x%02x, status: 0x%02x\n", payload[0], payload[1]);
-            return;
-    }
+            break;
 
-    Serial.printf("Global coommand 0x%02x not supported here...\n", commandId);
+        default:
+            Serial.printf("Global coommand 0x%02x not supported here...\n", commandId);
+            break;
+    }
 }
 
 // configure soil moisture reporting request example, look Zigbee Cluster Library Specification for more info
