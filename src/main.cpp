@@ -186,7 +186,7 @@ static void zstackCallback(ZStackEvent event, void *data, size_t length)
             break;
 
         case ZStackEvent::coordinatorReady:
-            Serial.printf("ZStack coordinator ready!\n");
+            Serial.printf("ZStack coordinator ready, address: 0x%016llx\n", *(reinterpret_cast <uint64_t*> (data)));
             zstack->permitJoin(true); // move it somewhere
             break;
 

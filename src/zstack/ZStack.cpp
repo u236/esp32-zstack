@@ -223,6 +223,19 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             break;
         }
 
+        case UTIL_GET_DEVICE_INFO:
+        {
+            if (data[0])
+            {
+                m_callback(ZStackEvent::coordinatorFailed, NULL, 0);
+                break;
+            }
+
+            memcpy(&m_ieeeAddress, data + 1, sizeof(m_ieeeAddress));
+            readNvItem();
+            break;
+        }
+
         case SYS_RESET_IND:
         {
             m_callback(ZStackEvent::resetDetected, NULL, 0);
@@ -245,7 +258,7 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
                 break;
             }
 
-            readNvItem();
+            sendFrame(UTIL_GET_DEVICE_INFO, NULL, 0);
             break;
         }
 
@@ -283,7 +296,7 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
         case APP_CNF_BDB_COMMISSIONING_NOTIFICATION:
         {
             if (data[1] == 0x02 && m_status == 0x09)
-                m_callback(data[2] ? ZStackEvent::coordinatorFailed : ZStackEvent::coordinatorReady, NULL, 0);
+                m_callback(data[2] ? ZStackEvent::coordinatorFailed : ZStackEvent::coordinatorReady, reinterpret_cast <uint8_t*> (&m_ieeeAddress), sizeof(m_ieeeAddress));
 
             break;
         }

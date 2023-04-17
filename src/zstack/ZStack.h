@@ -19,6 +19,7 @@
 #define AF_DATA_REQUEST                             0x2401
 #define ZDO_MGMT_PERMIT_JOIN_REQ                    0x2536
 #define ZDO_STARTUP_FROM_APP                        0x2540
+#define UTIL_GET_DEVICE_INFO                        0x2700
 
 #define SYS_RESET_IND                               0x4180
 #define AF_DATA_CONFIRM                             0x4480
@@ -188,6 +189,7 @@ class ZStack
         int8_t m_bslPin, m_rstPin;
 
         bool m_clear, m_permitJoin;
+        uint64_t m_ieeeAddress;
         uint8_t m_status;
 
         nvDataStruct m_nvData[8];
