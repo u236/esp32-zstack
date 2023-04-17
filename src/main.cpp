@@ -242,7 +242,7 @@ static void configureBatteryPercentageReporting(uint16_t shortAddress, uint16_t 
     request.dataType = 0x20;        // 8 bit unsigned integer
     request.minInterval = 0;        // 0 seconds
     request.maxInterval = 3600;     // 1 hour
-    request.valueChange = 1;        // 1 / 2 = 0.5%
+    request.valueChange = 0;        // any change
 
     memcpy(buffer, &header, sizeof(header));
     memcpy(buffer + sizeof(header), &request, sizeof(request));
@@ -267,7 +267,7 @@ static void configureSoilMoistureReporting(uint16_t shortAddress, uint16_t endpo
     request.dataType = 0x21;        // 16 bit unsigned integer
     request.minInterval = 0;        // 10 seconds
     request.maxInterval = 30;       // 30 seconds
-    request.valueChange = 50;       // 50 / 100 = 0.5%
+    request.valueChange = 0;        // any change
 
     memcpy(buffer, &header, sizeof(header));
     memcpy(buffer + sizeof(header), &request, sizeof(request));
