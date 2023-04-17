@@ -17,6 +17,7 @@
 #define SYS_OSAL_NV_WRITE                           0x2109
 #define AF_REGISTER                                 0x2400
 #define AF_DATA_REQUEST                             0x2401
+#define ZDO_BIND_REQ                                0x2521
 #define ZDO_MGMT_PERMIT_JOIN_REQ                    0x2536
 #define ZDO_STARTUP_FROM_APP                        0x2540
 #define UTIL_GET_DEVICE_INFO                        0x2700
@@ -24,6 +25,7 @@
 #define SYS_RESET_IND                               0x4180
 #define AF_DATA_CONFIRM                             0x4480
 #define AF_INCOMING_MSG                             0x4481
+#define ZDO_BIND_RSP                                0x45A1
 #define ZDO_MGMT_PERMIT_JOIN_RSP                    0x45B6
 #define ZDO_STATE_CHANGE_IND                        0x45C0
 #define ZDO_END_DEVICE_ANNCE_IND                    0x45C1
@@ -42,6 +44,12 @@
 
 #define AF_DISCV_ROUTE                              0x20
 #define AF_DEFAULT_RADIUS                           0x0F
+
+#define ADDRESS_MODE_NOT_PRESENT                    0x00
+#define ADDRESS_MODE_GROUP                          0x01
+#define ADDRESS_MODE_16_BIT                         0x02
+#define ADDRESS_MODE_64_BIT                         0x03
+#define ADDRESS_MODE_BROADCAST                      0xFF
 
 #include "Arduino.h"
 
@@ -62,6 +70,9 @@ enum ZStackEvent
     requestEnqueued,
     requestFailed,
     requestFinished,
+    bindEnqueued,
+    bindFailed,
+    bindFinished,
     messageReceived
 };
 
@@ -123,6 +134,17 @@ struct dataRequestStruct
     uint8_t  length;
 };
 
+struct bindRequestStruct
+{
+    uint16_t shortAddress;
+    uint64_t srcAddress;
+    uint8_t  srcEndpointId;
+    uint16_t clusterId;
+    uint8_t  dstAddressMode;
+    uint64_t dstAddress;
+    uint8_t  dstEndpointId;
+};
+
 struct permitJoinRequestStruct
 {
     uint8_t  mode;
@@ -169,6 +191,12 @@ struct incomingMessageStruct
     uint8_t  length;
 };
 
+struct bindResponseStruct
+{
+    uint16_t shortAddress;
+    uint8_t  status;
+};
+
 #pragma pack(pop)
 
 class ZStack
@@ -181,6 +209,7 @@ class ZStack
         void clear(void);
         void permitJoin(bool permit);
         void dataRequest(uint8_t id, uint16_t shortAddress, uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length);
+        void bindRequest(uint16_t shortAddress, uint64_t ieeeAddress, uint8_t endpointId, uint16_t clusterId);
         void parseInput(uint8_t *buffer, size_t length);
 
     private:

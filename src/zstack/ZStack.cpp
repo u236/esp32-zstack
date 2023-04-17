@@ -80,6 +80,21 @@ void ZStack::dataRequest(uint8_t id, uint16_t shortAddress, uint8_t endpointId, 
     sendFrame(AF_DATA_REQUEST, reinterpret_cast <uint8_t*> (&buffer), sizeof(buffer));
 }
 
+void ZStack::bindRequest(uint16_t shortAddress, uint64_t ieeeAddress, uint8_t endpointId, uint16_t clusterId)
+{
+    bindRequestStruct request;
+
+    request.shortAddress = shortAddress;
+    request.srcAddress = ieeeAddress;
+    request.srcEndpointId = endpointId;
+    request.clusterId = clusterId;
+    request.dstAddressMode = ADDRESS_MODE_64_BIT;
+    request.dstAddress = m_ieeeAddress;
+    request.dstEndpointId = 0x01;
+
+    sendFrame(ZDO_BIND_REQ, reinterpret_cast <uint8_t*> (&request), sizeof(request));
+}
+
 void ZStack::parseInput(uint8_t *buffer, size_t length)
 {
     size_t offset = 0;
@@ -209,6 +224,12 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             break;
         }
 
+        case ZDO_BIND_REQ:
+        {
+            m_callback(data[0] ? ZStackEvent::bindFailed : ZStackEvent::bindEnqueued, NULL, 0);
+            break;
+        }
+
         case ZDO_MGMT_PERMIT_JOIN_REQ:
         {
             m_callback(data[0] ? ZStackEvent::permitJoinFailed : ZStackEvent::permitJoinChanged, &m_permitJoin, sizeof(m_permitJoin));
@@ -271,6 +292,12 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
         case AF_INCOMING_MSG:
         {
             m_callback(ZStackEvent::messageReceived, data, length);
+            break;
+        }
+
+        case ZDO_BIND_RSP:
+        {
+            m_callback(ZStackEvent::bindFinished, data, length);
             break;
         }
 
