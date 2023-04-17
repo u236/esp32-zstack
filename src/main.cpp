@@ -15,9 +15,33 @@
 #define FC_MANUFACTURER_SPECIFIC    0x04
 #define FC_CLUSTER_SPECIFIC         0x01
 #define CMD_REPORT_ATTRIBUTES       0x0A
-//
+#define CMD_CONFIGURE_REPORTING     0x06
+#define CMD_DEFAULT_RESPONSE        0x0B
+
+#pragma pack(push, 1)
+
+struct zclHeader // simplified header without "manufacturer core" field
+{
+    uint8_t  frameControl;
+    uint8_t  transationId;
+    uint8_t  commandId;
+};
+
+struct configureReportingStruct
+{
+    uint8_t  direction;
+    uint16_t attributeId;
+    uint8_t  dataType;
+    uint16_t minInterval;
+    uint16_t maxInterval;
+    uint16_t valueChange;
+};
+
+#pragma pack(pop)
+// end of ZCL definitions
 
 static ZStack *zstack;
+static uint8_t transactionId = 0;
 
 // there we receive ZCL message, look Zigbee Cluster Library Specification for more info
 static void zclMessage(uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length)
@@ -55,40 +79,72 @@ static void zclMessage(uint8_t endpointId, uint16_t clusterId, uint8_t *data, si
         return;
     }
 
-    if (commandId == CMD_REPORT_ATTRIBUTES)
+
+    switch(commandId)
     {
-        uint16_t attributeId = payload[0] | payload[1] << 8;
-
-        switch (clusterId)
+        case CMD_REPORT_ATTRIBUTES:
         {
-            case 0x0402: // temperature measurement cluster
+            uint16_t attributeId = payload[0] | payload[1] << 8;
 
-                if (attributeId == 0x0000)
-                    Serial.printf("Temperature: %.1f\n", *(reinterpret_cast <int16_t*> (payload + 3)) / 100.0);
+            switch (clusterId)
+            {
+                case 0x0402: // temperature measurement cluster
 
-                break;
+                    if (attributeId == 0x0000)
+                        Serial.printf("Temperature: %.1f\n", *(reinterpret_cast <int16_t*> (payload + 3)) / 100.0);
 
-            case 0x0405: // relative humidity measurement cluster
+                    break;
 
-                if (attributeId == 0x0000)
-                    Serial.printf("Relative humidity: %.1f\n", *(reinterpret_cast <uint16_t*> (payload + 3)) / 100.0);
+                case 0x0405: // relative humidity measurement cluster
 
-                break;
+                    if (attributeId == 0x0000)
+                        Serial.printf("Relative humidity: %.1f\n", *(reinterpret_cast <uint16_t*> (payload + 3)) / 100.0);
 
-            case 0x0408: // soil moisture measurement cluster
+                    break;
 
-                if (attributeId == 0x0000)
-                    Serial.printf("Soil moisture: %.1f\n", *(reinterpret_cast <uint16_t*> (payload + 3)) / 100.0);
+                case 0x0408: // soil moisture measurement cluster
 
-                break;
+                    if (attributeId == 0x0000)
+                        Serial.printf("Soil moisture: %.1f\n", *(reinterpret_cast <uint16_t*> (payload + 3)) / 100.0);
+
+                    break;
+            }
+
+            return;
         }
 
-        return;
+        case CMD_DEFAULT_RESPONSE:
+            Serial.printf("Default response received, commandId: 0x%02x, status: 0x%02x\n", payload[0], payload[1]);
+            return;
     }
 
     Serial.printf("Global coommand 0x%02x not supported here...\n", commandId);
 }
-//
+
+// configure soil moisture reporting request example, look Zigbee Cluster Library Specification for more info
+static void configureSoilMoistureReporting(uint16_t shortAddress, uint16_t endpointId)
+{
+    zclHeader header;
+    configureReportingStruct request;
+    uint8_t buffer[sizeof(header) + sizeof(request)];
+
+    header.frameControl = 0x00;
+    header.transationId = transactionId;
+    header.commandId = CMD_CONFIGURE_REPORTING;
+
+    request.direction = 0x00;       // server to client
+    request.attributeId = 0x0000;   // soil mousture cluser measured value attribure
+    request.dataType = 0x21;        // 16 bit unsigned integer
+    request.minInterval = 10;       // 10 seconds
+    request.maxInterval = 120;      // 2 minutes
+    request.valueChange = 50;       // 50 / 100 = 0.5%
+
+    memcpy(buffer, &header, sizeof(header));
+    memcpy(buffer + sizeof(header), &request, sizeof(request));
+
+    // request to 0x0408 (soil moisture) cluster
+    zstack->dataRequest(transactionId++, shortAddress, endpointId, 0x0408, buffer, sizeof(buffer));
+}
 
 static void zstackCallback(ZStackEvent event, void *data, size_t length)
 {
@@ -142,14 +198,15 @@ static void zstackCallback(ZStackEvent event, void *data, size_t length)
         case ZStackEvent::deviceJoinedNetwork:
         {
             deviceAnnounceStruct *announce = reinterpret_cast <deviceAnnounceStruct*> (data);
-            Serial.printf("ZStack device 0x%16llx joined network with short address 0x%04x!\n", announce->ieeeAddress, announce->shortAddress);
+            Serial.printf("ZStack device 0x%016llx joined network with short address 0x%04x!\n", announce->ieeeAddress, announce->shortAddress);
+            configureSoilMoistureReporting(announce->shortAddress, 0x01);
             break;
         }
 
         case ZStackEvent::deviceLeftNetwork:
         {
             deviceLeaveStruct *leave = reinterpret_cast <deviceLeaveStruct*> (data);
-            Serial.printf("ZStack device 0x%16llx left network...\n", leave->ieeeAddress);
+            Serial.printf("ZStack device 0x%016llx left network...\n", leave->ieeeAddress);
             break;
         }
 
