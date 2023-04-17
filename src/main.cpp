@@ -153,6 +153,21 @@ static void zstackCallback(ZStackEvent event, void *data, size_t length)
             break;
         }
 
+        case ZStackEvent::requestEnqueued:
+            Serial.printf("ZStack data request was equeued...\n");
+            break;
+
+        case ZStackEvent::requestFailed:
+            Serial.printf("ZStack data request failed :(\n");
+            break;
+
+        case ZStackEvent::requestFinished:
+        {
+            dataConfirmStruct *confirm = reinterpret_cast <dataConfirmStruct*> (data);
+            Serial.printf("ZStack data request %d finished %s!\n", confirm->transactionId, confirm->status ? "with error" : "successfully");
+            break;
+        }
+
         case ZStackEvent::messageReceived:
         {
             incomingMessageStruct *message = reinterpret_cast <incomingMessageStruct*> (data);

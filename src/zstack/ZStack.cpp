@@ -1,8 +1,8 @@
 #include "ZStack.h"
 
-ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t bslPin, int8_t rstPin, int8_t rxPin, int8_t txPin, int8_t core) : m_callback(callback), m_channel(channel), m_bslPin(bslPin), m_rstPin(rstPin), m_clear(false), m_permitJoin(false), m_status(0x00)
+ZStack::ZStack(ZStackCallback callback, uint8_t channel, uint16_t panId, int8_t bslPin, int8_t rstPin, int8_t rxPin, int8_t txPin, int8_t core) : m_callback(callback), m_bslPin(bslPin), m_rstPin(rstPin), m_clear(false), m_permitJoin(false), m_status(0x00)
 {
-    uint32_t channelList = static_cast <uint32_t> (1 << m_channel);
+    uint32_t channelList = static_cast <uint32_t> (1 << channel);
 
     m_nvData[0] = {ZCD_NV_MARKER,            0x01, {ZSTACK_CONFIGURATION_MARKER}};
     m_nvData[1] = {ZCD_NV_PRECFGKEY,         0x10, {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}};
@@ -58,6 +58,26 @@ void ZStack::permitJoin(bool enabled)
 
     m_permitJoin = enabled;
     sendFrame(ZDO_MGMT_PERMIT_JOIN_REQ, reinterpret_cast <uint8_t*> (&request), sizeof(request));
+}
+
+void ZStack::dataRequest(uint8_t id, uint16_t shortAddress, uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length)
+{
+    dataRequestStruct request;
+    uint8_t buffer[sizeof(request) + length];
+
+    request.shortAddress = shortAddress;
+    request.dstEndpointId = endpointId;
+    request.srcEndpointId = 0x01;
+    request.clusterId = clusterId;
+    request.transactionId = id;
+    request.options = AF_DISCV_ROUTE;
+    request.radius = AF_DEFAULT_RADIUS;
+    request.length = static_cast <uint8_t> (length);
+
+    memcpy(buffer, &request, sizeof(request));
+    memcpy(buffer + sizeof(request), data, length);
+
+    sendFrame(AF_DATA_REQUEST, reinterpret_cast <uint8_t*> (&buffer), sizeof(buffer));
 }
 
 void ZStack::parseInput(uint8_t *buffer, size_t length)
@@ -183,6 +203,12 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             break;
         }
 
+        case AF_DATA_REQUEST:
+        {
+            m_callback(data[0] ? ZStackEvent::requestFailed : ZStackEvent::requestEnqueued, NULL, 0);
+            break;
+        }
+
         case ZDO_MGMT_PERMIT_JOIN_REQ:
         {
             m_callback(data[0] ? ZStackEvent::permitJoinFailed : ZStackEvent::permitJoinChanged, &m_permitJoin, sizeof(m_permitJoin));
@@ -220,6 +246,12 @@ void ZStack::parseFrame(uint16_t command, uint8_t *data, size_t length)
             }
 
             readNvItem();
+            break;
+        }
+
+        case AF_DATA_CONFIRM:
+        {
+            m_callback(ZStackEvent::requestFinished, data, length);
             break;
         }
 

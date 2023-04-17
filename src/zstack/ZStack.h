@@ -16,10 +16,12 @@
 #define SYS_OSAL_NV_READ                            0x2108
 #define SYS_OSAL_NV_WRITE                           0x2109
 #define AF_REGISTER                                 0x2400
+#define AF_DATA_REQUEST                             0x2401
 #define ZDO_MGMT_PERMIT_JOIN_REQ                    0x2536
 #define ZDO_STARTUP_FROM_APP                        0x2540
 
 #define SYS_RESET_IND                               0x4180
+#define AF_DATA_CONFIRM                             0x4480
 #define AF_INCOMING_MSG                             0x4481
 #define ZDO_MGMT_PERMIT_JOIN_RSP                    0x45B6
 #define ZDO_STATE_CHANGE_IND                        0x45C0
@@ -37,6 +39,9 @@
 #define ZCD_NV_ZDO_DIRECT_CB                        0x008F
 #define ZCD_NV_TCLK_TABLE                           0x0101
 
+#define AF_DISCV_ROUTE                              0x20
+#define AF_DEFAULT_RADIUS                           0x0F
+
 #include "Arduino.h"
 
 enum ZStackEvent
@@ -53,6 +58,9 @@ enum ZStackEvent
     permitJoinFailed,
     deviceJoinedNetwork,
     deviceLeftNetwork,
+    requestEnqueued,
+    requestFailed,
+    requestFinished,
     messageReceived
 };
 
@@ -102,6 +110,18 @@ struct afRegisterRequestStruct
     uint8_t  latency;
 };
 
+struct dataRequestStruct
+{
+    uint16_t shortAddress;
+    uint8_t  dstEndpointId;
+    uint8_t  srcEndpointId;
+    uint16_t clusterId;
+    uint8_t  transactionId;
+    uint8_t  options;
+    uint8_t  radius;
+    uint8_t  length;
+};
+
 struct permitJoinRequestStruct
 {
     uint8_t  mode;
@@ -124,6 +144,13 @@ struct deviceLeaveStruct
     uint8_t  request;
     uint8_t  remove;
     uint8_t  rejoin;
+};
+
+struct dataConfirmStruct
+{
+    uint8_t  status;
+    uint8_t  endpointId;
+    uint8_t  transactionId;
 };
 
 struct incomingMessageStruct
@@ -152,12 +179,12 @@ class ZStack
         void reset(void);
         void clear(void);
         void permitJoin(bool permit);
+        void dataRequest(uint8_t id, uint16_t shortAddress, uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length);
         void parseInput(uint8_t *buffer, size_t length);
 
     private:
 
         ZStackCallback m_callback;
-        uint8_t m_channel;
         int8_t m_bslPin, m_rstPin;
 
         bool m_clear, m_permitJoin;
