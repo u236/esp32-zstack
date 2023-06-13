@@ -38,6 +38,10 @@
 #define DATA_TYPE_SINGLE_PRECISION          0x39
 #define DATA_TYPE_DOUBLE_PRECISION          0x3A
 
+#define CLUSTER_POWER_CONFIGURATION         0x0001
+#define CLUSTER_TEMPERATURE_MEASUREMENT     0x0402
+#define CLUSTER_SOIL_MOISTURE               0x0408
+
 #pragma pack(push, 1)
 
 struct zclHeader // simplified header without "manufacturer core" field
@@ -113,28 +117,24 @@ static void parseAttribute(uint8_t endpointId, uint16_t clusterId, uint16_t attr
 
     switch (clusterId)
     {
-        case 0x0001: // power configuration cluster
+        case CLUSTER_POWER_CONFIGURATION:
+
+            if (attributeId == 0x0020)
+                Serial.printf("Battery voltage: %.1f\n", *(reinterpret_cast <uint8_t*> (data)) / 100.0);
 
             if (attributeId == 0x0021)
-                Serial.printf("Battery: %.1f\n", *(reinterpret_cast <uint8_t*> (data)) / 2.0);
+                Serial.printf("Battery percentage: %.1f\n", *(reinterpret_cast <uint8_t*> (data)) / 2.0);
 
             break;
 
-        case 0x0402: // temperature measurement cluster
+        case CLUSTER_TEMPERATURE_MEASUREMENT:
 
             if (attributeId == 0x0000)
                 Serial.printf("Temperature: %.1f\n", *(reinterpret_cast <int16_t*> (data)) / 100.0);
 
             break;
 
-        case 0x0405: // relative humidity measurement cluster
-
-            if (attributeId == 0x0000)
-                Serial.printf("Relative humidity: %.1f\n", *(reinterpret_cast <uint16_t*> (data)) / 100.0);
-
-            break;
-
-        case 0x0408: // soil moisture measurement cluster
+        case CLUSTER_SOIL_MOISTURE:
 
             if (attributeId == 0x0000)
                 Serial.printf("Soil moisture: %.1f\n", *(reinterpret_cast <uint16_t*> (data)) / 100.0);
@@ -143,8 +143,8 @@ static void parseAttribute(uint8_t endpointId, uint16_t clusterId, uint16_t attr
     }
 }
 
- static void parseAttributesReport(uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length)
- {
+static void parseAttributesReport(uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length)
+{
     size_t offset = 0;
 
     while (length >= offset + 3) // attribute id field + data type field = 3 bytes
@@ -165,7 +165,7 @@ static void parseAttribute(uint8_t endpointId, uint16_t clusterId, uint16_t attr
         parseAttribute(endpointId, clusterId, attributeId, payload, size);
         offset += size + 3;
     }
- }
+}
 
 // there we receive ZCL message, look Zigbee Cluster Library Specification for more info
 static void zclMessage(uint8_t endpointId, uint16_t clusterId, uint8_t *data, size_t length)
@@ -226,8 +226,8 @@ static void zclMessage(uint8_t endpointId, uint16_t clusterId, uint8_t *data, si
     }
 }
 
-// configure battery percentage reporting request example, look Zigbee Cluster Library Specification for more info
-static void configureBatteryPercentageReporting(uint16_t shortAddress, uint16_t endpointId)
+// configure reporting request example, look Zigbee Cluster Library Specification for more info
+static void configureReporting(uint16_t shortAddress, uint16_t endpointId, uint16_t clusterId, uint16_t attributeId, uint8_t dataType)
 {
     zclHeader header;
     configureReportingStruct request;
@@ -235,45 +235,19 @@ static void configureBatteryPercentageReporting(uint16_t shortAddress, uint16_t 
 
     header.frameControl = 0x00;
     header.transationId = transactionId;
-    header.commandId = CMD_CONFIGURE_REPORTING;
+    header.commandId    = CMD_CONFIGURE_REPORTING;
 
-    request.direction = 0x00;       // server to client
-    request.attributeId = 0x0021;   // battery percentage value attribure
-    request.dataType = 0x20;        // 8 bit unsigned integer
-    request.minInterval = 0;        // 0 seconds
-    request.maxInterval = 3600;     // 1 hour
-    request.valueChange = 0;        // any change
-
-    memcpy(buffer, &header, sizeof(header));
-    memcpy(buffer + sizeof(header), &request, sizeof(request));
-
-    // request to 0x0001 (power configuration) cluster
-    zstack->dataRequest(transactionId++, shortAddress, endpointId, 0x0001, buffer, sizeof(buffer));
-}
-
-// configure soil moisture reporting request example, look Zigbee Cluster Library Specification for more info
-static void configureSoilMoistureReporting(uint16_t shortAddress, uint16_t endpointId)
-{
-    zclHeader header;
-    configureReportingStruct request;
-    uint8_t buffer[sizeof(header) + sizeof(request)];
-
-    header.frameControl = 0x00;
-    header.transationId = transactionId;
-    header.commandId = CMD_CONFIGURE_REPORTING;
-
-    request.direction = 0x00;       // server to client
-    request.attributeId = 0x0000;   // soil mousture cluser measured value attribure
-    request.dataType = 0x21;        // 16 bit unsigned integer
-    request.minInterval = 0;        // 10 seconds
-    request.maxInterval = 30;       // 30 seconds
-    request.valueChange = 0;        // any change
+    request.direction   = 0x00;         // server to client
+    request.attributeId = attributeId;
+    request.dataType    = dataType;
+    request.minInterval = 0;            // 0 seconds
+    request.maxInterval = 3600;         // 1 hour
+    request.valueChange = 0;            // any change
 
     memcpy(buffer, &header, sizeof(header));
     memcpy(buffer + sizeof(header), &request, sizeof(request));
 
-    // request to 0x0408 (soil moisture) cluster
-    zstack->dataRequest(transactionId++, shortAddress, endpointId, 0x0408, buffer, sizeof(buffer));
+    zstack->dataRequest(transactionId++, shortAddress, endpointId, clusterId, buffer, sizeof(buffer));
 }
 
 static void zstackCallback(ZStackEvent event, void *data, size_t length)
@@ -330,15 +304,16 @@ static void zstackCallback(ZStackEvent event, void *data, size_t length)
             deviceAnnounceStruct *announce = reinterpret_cast <deviceAnnounceStruct*> (data);
             Serial.printf("ZStack device 0x%016llx joined network with short address 0x%04x!\n", announce->ieeeAddress, announce->shortAddress);
 
-            // bind and configure power configuration cluster reporting
-            zstack->bindRequest(announce->shortAddress, announce->ieeeAddress, 0x01, 0x0001);
-            configureBatteryPercentageReporting(announce->shortAddress, 0x01);
-            //
+            // bind clusters
+            zstack->bindRequest(announce->shortAddress, announce->ieeeAddress, 0x01, CLUSTER_POWER_CONFIGURATION);
+            zstack->bindRequest(announce->shortAddress, announce->ieeeAddress, 0x01, CLUSTER_TEMPERATURE_MEASUREMENT);
+            zstack->bindRequest(announce->shortAddress, announce->ieeeAddress, 0x01, CLUSTER_SOIL_MOISTURE);
 
-            // bind and configure soil moisture cluster reporting
-            zstack->bindRequest(announce->shortAddress, announce->ieeeAddress, 0x01, 0x0408);
-            configureSoilMoistureReporting(announce->shortAddress, 0x01);
-            //
+            // configure reporting
+            configureReporting(announce->shortAddress, 0x01, CLUSTER_POWER_CONFIGURATION,     0x0020, DATA_TYPE_8BIT_UNSIGNED);
+            configureReporting(announce->shortAddress, 0x01, CLUSTER_POWER_CONFIGURATION,     0x0021, DATA_TYPE_8BIT_UNSIGNED);
+            configureReporting(announce->shortAddress, 0x01, CLUSTER_TEMPERATURE_MEASUREMENT, 0x0000, DATA_TYPE_16BIT_SIGNED);
+            configureReporting(announce->shortAddress, 0x01, CLUSTER_SOIL_MOISTURE,           0x0000, DATA_TYPE_16BIT_UNSIGNED);
 
             break;
         }
