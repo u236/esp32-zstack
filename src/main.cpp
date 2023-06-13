@@ -120,7 +120,7 @@ static void parseAttribute(uint8_t endpointId, uint16_t clusterId, uint16_t attr
         case CLUSTER_POWER_CONFIGURATION:
 
             if (attributeId == 0x0020)
-                Serial.printf("Battery voltage: %.1f\n", *(reinterpret_cast <uint8_t*> (data)) / 100.0);
+                Serial.printf("Battery voltage: %.1f\n", *(reinterpret_cast <uint8_t*> (data)) / 10.0);
 
             if (attributeId == 0x0021)
                 Serial.printf("Battery percentage: %.1f\n", *(reinterpret_cast <uint8_t*> (data)) / 2.0);
